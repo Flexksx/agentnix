@@ -2,7 +2,12 @@
 
 {
   name,
-  skillContent,
+  description,
+  skillContent ? "",
+  license ? null,
+  compatibility ? null,
+  metadata ? {},
+  allowedTools ? [],
   references ? [],
   scripts ? [],
   examples ? [],
@@ -10,7 +15,24 @@
 }:
 
 let
-  # Resolve a single file entry: { name; content?; src?; } -> derivation
+  # --- YAML frontmatter generation ---
+
+  metadataLines = lib.concatStringsSep "\n" (
+    lib.mapAttrsToList (k: v: "  ${k}: ${builtins.toJSON v}") metadata
+  );
+
+  frontmatter = lib.concatStringsSep "\n" (
+    [ "name: ${name}" "description: ${description}" ]
+    ++ lib.optional (license != null) "license: ${license}"
+    ++ lib.optional (compatibility != null) "compatibility: ${compatibility}"
+    ++ lib.optional (metadata != {}) "metadata:\n${metadataLines}"
+    ++ lib.optional (allowedTools != []) "allowed-tools: ${lib.concatStringsSep " " allowedTools}"
+  );
+
+  fullContent = "---\n${frontmatter}\n---\n\n${skillContent}";
+
+  # --- File entry helpers ---
+
   mkFile = entry:
     if entry ? content then
       writeText entry.name entry.content
@@ -19,24 +41,18 @@ let
     else
       throw "mkSkill: each entry must have either 'content' or 'src' — got neither for '${entry.name}'";
 
-  # Build a subdirectory derivation from a list of file entries
   mkSubdir = dirName: entries:
-    let
-      copyCommands = lib.concatMapStringsSep "\n" (entry:
-        let src = mkFile entry;
-        in "cp ${src} $out/${dirName}/${entry.name}"
-      ) entries;
-    in copyCommands;
+    lib.concatMapStringsSep "\n" (entry:
+      let src = mkFile entry;
+      in "cp ${src} $out/${dirName}/${entry.name}"
+    ) entries;
 
   hasRefs = references != [];
   hasScripts = scripts != [];
   hasExamples = examples != [];
   hasDeps = dependencies != [];
 
-  # When dependencies exist, create a bin/ directory with wrapped PATH
-  depsBinPath = lib.makeBinPath dependencies;
-
-  skillMd = writeText "SKILL.md" skillContent;
+  skillMd = writeText "SKILL.md" fullContent;
 
 in runCommand "agent-skill-${name}" {} ''
   mkdir -p $out

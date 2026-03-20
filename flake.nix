@@ -5,83 +5,83 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   };
 
-  outputs = { self, nixpkgs }:
+  outputs =
+    { self, nixpkgs }:
     let
-      supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+      supportedSystems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ];
 
-      forAllSystems = f: nixpkgs.lib.genAttrs supportedSystems (system:
-        f {
-          pkgs = nixpkgs.legacyPackages.${system};
-          inherit system;
-        }
-      );
+      forAllSystems =
+        f:
+        nixpkgs.lib.genAttrs supportedSystems (
+          system:
+          f {
+            pkgs = nixpkgs.legacyPackages.${system};
+            inherit system;
+          }
+        );
 
-      # System-independent lib constructor — consumers call this with their pkgs
-      mkLib = pkgs: import ./lib {
-        inherit (pkgs) lib runCommand writeText symlinkJoin makeBinaryWrapper writeShellScript writeShellApplication;
-      };
+      mkLib =
+        pkgs:
+        import ./lib {
+          inherit (pkgs)
+            lib
+            runCommand
+            writeText
+            symlinkJoin
+            makeBinaryWrapper
+            writeShellScript
+            writeShellApplication
+            ;
+        };
     in
     {
       # Expose the lib constructor for consumers
       lib.mkLib = mkLib;
 
       # Per-system outputs for local development / testing
-      packages = forAllSystems ({ pkgs, ... }:
+      packages = forAllSystems (
+        { pkgs, ... }:
         let
-          agentnix = mkLib pkgs;
+          inherit (mkLib pkgs) mkSkill mkSkillSet;
 
-          exampleSkill = agentnix.mkSkill {
-            name = "example";
-            skillContent = ''
-              ---
-              name: example
-              description: An example skill to demonstrate agentnix.
-              ---
-              # Example Skill
+          codeReview = import ./example/skills/code-review.nix { inherit mkSkill pkgs; };
+          gitConventions = import ./example/skills/git-conventions.nix { inherit mkSkill; };
+          nixDev = import ./example/skills/nix-development.nix { inherit mkSkill pkgs; };
 
-              This is a demonstration skill built with agentnix.
-            '';
-            references = [
-              { name = "usage.md"; content = "# Usage\n\nSee the main SKILL.md for details."; }
-            ];
+          skillSet = mkSkillSet {
+            skills = [ codeReview gitConventions nixDev ];
           };
-
-          exampleSet = agentnix.mkSkillSet {
-            skills = [ exampleSkill ];
-          };
-        in {
-          default = exampleSkill;
-          example-skill = exampleSkill;
-          inherit (exampleSet) activationScript;
+        in
+        {
+          default = codeReview;
+          code-review = codeReview;
+          git-conventions = gitConventions;
+          nix-development = nixDev;
+          inherit (skillSet) activationScript;
         }
       );
 
-      devShells = forAllSystems ({ pkgs, ... }:
+      devShells = forAllSystems (
+        { pkgs, ... }:
         let
-          agentnix = mkLib pkgs;
+          inherit (mkLib pkgs) mkSkill mkSkillSet;
 
-          exampleSkill = agentnix.mkSkill {
-            name = "example";
-            skillContent = ''
-              ---
-              name: example
-              description: An example skill to demonstrate agentnix.
-              ---
-              # Example Skill
+          codeReview = import ./example/skills/code-review.nix { inherit mkSkill pkgs; };
+          gitConventions = import ./example/skills/git-conventions.nix { inherit mkSkill; };
+          nixDev = import ./example/skills/nix-development.nix { inherit mkSkill pkgs; };
 
-              This is a demonstration skill built with agentnix.
-            '';
-            references = [
-              { name = "usage.md"; content = "# Usage\n\nSee the main SKILL.md for details."; }
-            ];
+          skillSet = mkSkillSet {
+            skills = [ codeReview gitConventions nixDev ];
           };
-
-          exampleSet = agentnix.mkSkillSet {
-            skills = [ exampleSkill ];
-          };
-        in {
+        in
+        {
           default = pkgs.mkShell {
-            shellHook = exampleSet.shellHook;
+            shellHook = skillSet.shellHook;
           };
         }
       );
